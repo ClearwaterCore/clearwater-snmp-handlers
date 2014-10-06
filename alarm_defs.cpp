@@ -45,13 +45,12 @@
 #include <fstream>
 #include <stdexcept>
 
-
 // Override rapidjson assert macro to ensure that an unexpected error will
 // not cause snmpd to terminate.
 
 #define  RAPIDJSON_ASSERT(x)                          \
            do {                                       \
-             if (! (x)) {                             \
+             if (!(x)) {                              \
                throw std::domain_error("rapidjson");  \
              }                                        \
            } while (0) 
@@ -59,15 +58,11 @@
 #include <rapidjson/document.h>
 #include <rapidjson/filereadstream.h>
 
-
 #include "alarm_defs.hpp"
-
 
 std::vector<AlarmDefFile> AlarmDefFile::_def_files;
 
 AlarmDefs AlarmDefs::_instance;
-
-
 
 // Translate ituAlarmPerceivedSeverity to alarmModelState based upon mapping
 // defined in section 5.4 of RFC 3877.
@@ -85,15 +80,13 @@ unsigned int AlarmDef::state()
   return severity_to_state[idx];
 }
 
-
-
 bool AlarmDefFile::parse(std::list<AlarmDef>& defs)
 {
   try
   {
     rapidjson::Document doc;
 
-    if (! parse_doc(doc))
+    if (!parse_doc(doc))
     {
       return false;
     }
@@ -102,7 +95,7 @@ bool AlarmDefFile::parse(std::list<AlarmDef>& defs)
     // contains alarm objects, which in turn contain the defails for an
     // alarm.
 
-    if (! (doc.HasMember("alarms") && doc["alarms"].IsArray()))
+    if (!(doc.HasMember("alarms") && doc["alarms"].IsArray()))
     {
       snmp_log(LOG_ERR, "%s: 'alarms' array missing", _path.c_str());
       return false;
@@ -118,7 +111,7 @@ bool AlarmDefFile::parse(std::list<AlarmDef>& defs)
       {
         const rapidjson::Value& alarm_obj = alarm_objs[idx];
 
-        if (! parse_def(idx, alarm_obj, def))
+        if (!parse_def(idx, alarm_obj, def))
         {
           return false;
         }
@@ -141,7 +134,6 @@ bool AlarmDefFile::parse(std::list<AlarmDef>& defs)
   return true;
 }
 
-
 time_t AlarmDefFile::last_modified()
 {
   time_t mod_time = 0;
@@ -155,11 +147,10 @@ time_t AlarmDefFile::last_modified()
   return mod_time;
 }
 
-
 std::vector<AlarmDefFile>& AlarmDefFile::alarm_def_files()
 {
   static const char def_file_root[]  = "/etc/clearwater/alarm-defs/";
-  static const char def_file_sufix[] = "-alarms.json";
+  static const char def_file_suffix[] = "-alarms.json";
 
   if (_def_files.size() == 0)
   {
@@ -174,7 +165,7 @@ std::vector<AlarmDefFile>& AlarmDefFile::alarm_def_files()
       {
         if (entry.d_type == DT_REG)
         {
-          if (boost::algorithm::ends_with(entry.d_name, def_file_sufix))
+          if (boost::algorithm::ends_with(entry.d_name, def_file_suffix))
           {
             AlarmDefFile def_file(std::string(def_file_root) + entry.d_name);
 
@@ -193,7 +184,6 @@ std::vector<AlarmDefFile>& AlarmDefFile::alarm_def_files()
 
   return _def_files;
 }
-
 
 // Open alarm definition file and perform a stream parse to rapidjson
 // document representation.
@@ -224,14 +214,14 @@ bool AlarmDefFile::parse_doc(rapidjson::Document& doc)
   return doc_ok;
 }
 
-
 // Extract alarm details from JSON object to internal representation while
 // verifying all expected fields are present and valid.
 bool AlarmDefFile::parse_def(unsigned int idx, const rapidjson::Value& obj, AlarmDef& def)
 {
   bool def_ok = true;
 
-  // zero relative to 1 relative for error logs
+  // Adjust the alarm definition index from zero relative to 1 relative for error logging
+  // (i.e. the first definition will be 1 (vs. 0) when reporting an error).
   idx++;
 
   if (obj.HasMember("identifier") && obj["identifier"].IsString())
@@ -345,8 +335,6 @@ bool AlarmDefFile::parse_def(unsigned int idx, const rapidjson::Value& obj, Alar
   return def_ok;
 }
 
-
-
 bool AlarmDefs::load()
 {
   bool load_ok = true;
@@ -365,7 +353,7 @@ bool AlarmDefs::load()
 
   if (_defs.size() > 0)
   {
-    std::map<unsigned int, unsigned int> dup_check;
+    std::map<unsigned int, AlarmDef*> dup_check;
 
     for (std::list<AlarmDef>::iterator d_it = _defs.begin(); d_it != _defs.end(); d_it++)
     {
@@ -376,16 +364,17 @@ bool AlarmDefs::load()
         _idx_to_clear_def[d_it->index()] = &(*d_it);
       }
 
-      unsigned int index_severity = ((*d_it).index() << 3) | (*d_it).severity();
+      unsigned int index_severity = (d_it->index() << 3) | d_it->severity();
 
       if (dup_check.count(index_severity))
       {
-        snmp_log(LOG_ERR, "duplicate index/severity (%d/%d)", (*d_it).index(), (*d_it).severity());
+        snmp_log(LOG_ERR, "duplicate index/severity: %d/%d; conflicting identifiers: %s, %s", d_it->index(), d_it->severity(),
+                                                  d_it->identifier().c_str(), dup_check[index_severity]->identifier().c_str());
         load_ok = false;
       }
       else
       {
-        dup_check[index_severity] = 1;
+        dup_check[index_severity] = &(*d_it);
       }
     } 
   }
@@ -397,7 +386,6 @@ bool AlarmDefs::load()
 
   return load_ok;
 }
-
 
 AlarmDef* AlarmDefs::get_definition(const std::string& id)
 {

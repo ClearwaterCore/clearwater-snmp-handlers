@@ -39,9 +39,7 @@
 #include "alarm_req_listener.hpp"
 #include "itu_alarm_table.hpp"
 
-
 static bool loaded = false;
-
 
 extern "C" {
   // Sub-agent entry point. SNMPd looks for an 'init_<module_name>' function in this
@@ -52,7 +50,7 @@ extern "C" {
     // Start alarm request listener thread and initialize supported tables if alarm
     // definitions have been loaded successfully.
 
-    if ((! loaded) && AlarmDefs::get_instance().load())
+    if (!loaded && AlarmDefs::get_instance().load())
     {
       AlarmReqListener::get_instance().start();
 

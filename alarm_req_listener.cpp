@@ -44,15 +44,11 @@
 #include "alarm_req_listener.hpp"
 #include "alarm_trap_sender.hpp"
 
-
-
 AlarmReqListener AlarmReqListener::_instance;
-
-
 
 bool AlarmReqListener::start()
 {
-  if (! zmq_init_ctx())
+  if (!zmq_init_ctx())
   {
     return false;
   }
@@ -69,14 +65,12 @@ bool AlarmReqListener::start()
   return true;
 }
 
-
 void AlarmReqListener::stop()
 {
   zmq_clean_ctx();
 
   pthread_join(_thread, NULL);
 }
-
 
 void* AlarmReqListener::listener_thread(void* alarm_req_listener)
 {
@@ -85,11 +79,9 @@ void* AlarmReqListener::listener_thread(void* alarm_req_listener)
   return NULL;
 }
 
-
 AlarmReqListener::AlarmReqListener() : _ctx(NULL), _sck(NULL)
 {
 }
-
 
 bool AlarmReqListener::zmq_init_ctx()
 {
@@ -102,7 +94,6 @@ bool AlarmReqListener::zmq_init_ctx()
 
   return true;
 }
-
 
 bool AlarmReqListener::zmq_init_sck()
 {
@@ -131,7 +122,6 @@ bool AlarmReqListener::zmq_init_sck()
   return true;
 }
 
-
 void AlarmReqListener::zmq_clean_ctx()
 {
   if (_ctx)
@@ -144,7 +134,6 @@ void AlarmReqListener::zmq_clean_ctx()
     _ctx = NULL;
   }
 }
-
 
 void AlarmReqListener::zmq_clean_sck()
 {
@@ -159,10 +148,9 @@ void AlarmReqListener::zmq_clean_sck()
   }
 }
 
-
 void AlarmReqListener::listener()
 {
-  if (! zmq_init_sck())
+  if (!zmq_init_sck())
   {
     return;
   }
@@ -171,7 +159,7 @@ void AlarmReqListener::listener()
   {
     std::vector<std::string> msg;
 
-    if (! next_msg(msg))
+    if (!next_msg(msg))
     {
       zmq_clean_sck();
       return;
@@ -197,7 +185,6 @@ void AlarmReqListener::listener()
     reply("ok");
   }
 }
-
 
 bool AlarmReqListener::next_msg(std::vector<std::string>& msg)
 {
@@ -258,7 +245,6 @@ bool AlarmReqListener::next_msg(std::vector<std::string>& msg)
 
   return true;
 }
-
 
 void AlarmReqListener::reply(const char* response)
 {
