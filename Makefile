@@ -31,24 +31,122 @@
 # under which the OpenSSL Project distributes the OpenSSL toolkit software,
 # as those licenses appear in the file LICENSE-OPENSSL.
 
+STATS_SOURCE := custom_handler.cpp oid.cpp oidtree.cpp oid_inet_addr.cpp zmq_listener.cpp zmq_message_handler.cpp
+STATS_OBJ := $(patsubst %.cpp, %.o, ${STATS_SOURCE})
 
 # this should come first so make does the right thing by default
 all: deb
 
 ROOT ?= ${PWD}
-ALARM_INCLUDES := -I${ROOT}/modules/rapidjson/include
+MK_DIR := ${ROOT}/mk
 
-sprout_handler.so: *.cpp *.hpp
-	g++ `net-snmp-config --cflags` -Wall -std=c++0x -g -O0 -fPIC -shared -o sprout_handler.so custom_handler.cpp oid.cpp oidtree.cpp oid_inet_addr.cpp sproutdata.cpp zmq_listener.cpp zmq_message_handler.cpp `net-snmp-config --libs` -lzmq -lpthread
+ALARM_INCLUDES := -I${ROOT}/modules/cpp-common/include -I${ROOT}/modules/rapidjson/include
 
-bono_handler.so: *.cpp *.hpp
-	g++ `net-snmp-config --cflags` -Wall -std=c++0x -g -O0 -fPIC -shared -o bono_handler.so custom_handler.cpp oid.cpp oidtree.cpp oid_inet_addr.cpp bonodata.cpp zmq_listener.cpp zmq_message_handler.cpp `net-snmp-config --libs` -lzmq -lpthread
+GTEST_DIR := $(ROOT)/modules/gmock/gtest
+GMOCK_DIR := $(ROOT)/modules/gmock
 
-homestead_handler.so: *.cpp *.hpp
-	g++ `net-snmp-config --cflags` -Wall -std=c++0x -g -O0 -fPIC -shared -o homestead_handler.so custom_handler.cpp oid.cpp oidtree.cpp oid_inet_addr.cpp homesteaddata.cpp zmq_listener.cpp zmq_message_handler.cpp `net-snmp-config --libs` -lzmq -lpthread
+TARGET := handler
 
-alarm_handler.so: *.cpp *.hpp
-	g++ `net-snmp-config --cflags` -Wall -std=c++0x -g -O0 -fPIC -shared ${ALARM_INCLUDES} -o alarm_handler.so alarm_handler.cpp alarm_defs.cpp alarm_model_table.cpp alarm_req_listener.cpp alarm_trap_sender.cpp itu_alarm_table.cpp `net-snmp-config --libs` -lzmq -lpthread
+TARGET_TEST := handler_test
+
+TARGET_SOURCES := \
+                  alarm_handler.cpp \
+                  alarm_defs.cpp \
+                  alarm_req_listener.cpp \
+                  alarm_trap_sender.cpp \
+                  alarm_model_table.cpp \
+                  itu_alarm_table.cpp 
+
+ALARM_SOURCES := ${TARGET_SOURCES}
+
+TARGET_SOURCES_TEST := test_main.cpp \
+                       alarm.cpp \
+                       log.cpp \
+                       logger.cpp \
+                       alarm_table_defs_test.cpp \
+                       alarm_req_listener_test.cpp \
+                       test_interposer.cpp \
+                       fakenetsnmp.cpp \
+                       fakezmq.cpp
+
+TARGET_EXTRA_OBJS_TEST := gmock-all.o \
+                          gtest-all.o
+
+CPPFLAGS += -std=c++0x -ggdb3 
+CPPFLAGS += -I$(ROOT) \
+            -I$(ROOT)/modules/cpp-common/include
+
+CPPFLAGS_TEST += -DUNIT_TEST \
+                 -fprofile-arcs -ftest-coverage \
+                 -O0 \
+                 -fno-access-control \
+                 -I$(GTEST_DIR)/include -I$(GMOCK_DIR)/include
+CPPFLAGS_TEST += -I$(ROOT)/modules/cpp-common/test_utils
+
+LDFLAGS += -lzmq \
+           -lpthread \
+           `net-snmp-config --libs` 
+
+#LDFLAGS_TEST += -Wl,-rpath=$(ROOT)/usr/lib
+
+# Add modules/cpp-common/src as a VPATH to pull in required common modules
+VPATH := ${ROOT}/modules/cpp-common/src:${ROOT}/modules/cpp-common/test_utils
+
+TEST_XML = $(TEST_OUT_DIR)/test_detail_$(TARGET_TEST).xml
+COVERAGE_XML = $(TEST_OUT_DIR)/coverage_$(TARGET_TEST).xml
+COVERAGE_LIST_TMP = $(TEST_OUT_DIR)/coverage_list_tmp
+COVERAGE_LIST = $(TEST_OUT_DIR)/coverage_list
+COVERAGE_MASTER_LIST = ut/coverage-not-yet
+VG_XML = $(TEST_OUT_DIR)/vg_$(TARGET_TEST).memcheck
+VG_OUT = $(TEST_OUT_DIR)/vg_$(TARGET_TEST).txt
+VG_LIST = $(TEST_OUT_DIR)/vg_$(TARGET_TEST)_list
+VG_SUPPRESS = $(TARGET_TEST).supp
+
+COVERAGEFLAGS = $(OBJ_DIR_TEST) --object-directory=$(shell pwd) --root=${ROOT} \
+                --exclude='(^include/|^modules/gmock/|^modules/rapidjson/|^modules/cpp-common/include/|^ut/|^usr/|^modules/gemini/src/ut/|^modules/gemini/include/)' \
+                --sort-percentage
+
+EXTRA_CLEANS += $(TEST_XML) \
+                $(COVERAGE_XML) \
+                $(VG_XML) $(VG_OUT) \
+                $(OBJ_DIR_TEST)/*.gcno \
+                $(OBJ_DIR_TEST)/*.gcda \
+                *.gcov
+
+# Now the GMock / GTest boilerplate.
+GTEST_HEADERS := $(GTEST_DIR)/include/gtest/*.h \
+                 $(GTEST_DIR)/include/gtest/internal/*.h
+GMOCK_HEADERS := $(GMOCK_DIR)/include/gmock/*.h \
+                 $(GMOCK_DIR)/include/gmock/internal/*.h \
+                 $(GTEST_HEADERS)
+
+GTEST_SRCS_ := $(GTEST_DIR)/src/*.cc $(GTEST_DIR)/src/*.h $(GTEST_HEADERS)
+GMOCK_SRCS_ := $(GMOCK_DIR)/src/*.cc $(GMOCK_HEADERS)
+# End of boilerplate
+
+
+#include ${MK_DIR}/platform.mk
+
+net-snmp-5.4.3: net-snmp-5.4.3.tgz
+	tar xvzf $<
+
+net-snmp-5.4.3/agent/helpers/.libs/libnetsnmphelpers.a net-snmp-5.4.3/snmplib/.libs/libnetsnmp.a net-snmp-5.4.3/agent/.libs/libnetsnmpagent.a: net-snmp-5.4.3
+	( cd $^;./configure --disable-embedded-perl --with-pic < /dev/null; make snmplib agent)
+
+%.o: %.cpp
+	g++ `net-snmp-config --cflags` -Wall -std=c++0x -g -O0 -fPIC $(ALARM_INCLUDES) -c -o $@ $^
+
+%.so: net-snmp-5.4.3/agent/helpers/.libs/libnetsnmphelpers.a net-snmp-5.4.3/snmplib/.libs/libnetsnmp.a net-snmp-5.4.3/agent/.libs/libnetsnmpagent.a agentx_handler.cpp agentx_launcher.cpp
+	g++ `net-snmp-config --cflags` -DAGENTX_NAME=$(basename $@) -Wall -std=c++0x -g -O0 -fPIC -shared $(ALARM_INCLUDES) -o $@ `net-snmp-config --libs` agentx_launcher.cpp ${ALARM_OBJS} -lzmq -lpthread -lcrypto -lperl
+	g++ `net-snmp-config --cflags` -DAGENTX_NAME=$(basename $@) -Wall -std=c++0x -g -O0 -fPIC $(ALARM_INCLUDES) -o snmp_$(basename $@)  -Wl,-Bsymbolic-functions -Wl,-z,relro -Lnet-snmp-5.4.3/snmplib/.libs -Lnet-snmp-5.4.3/agent/.libs -Lnet-snmp-5.4.3/agent/helpers/.libs -Wl,-Bstatic -Wl,--start-group agentx_handler.cpp $(patsubst %.cpp,,$^) -lnetsnmp -lnetsnmpagent -lnetsnmphelpers -Wl,--end-group -Wl,-Bdynamic -lzmq -lpthread -lcrypto -ldl
+
+sprout_handler.so: ${STATS_OBJ} sproutdata.o
+
+bono_handler.so: ${STATS_OBJ} bonodata.o
+
+homestead_handler.so: ${STATS_OBJ} homesteaddata.o
+
+alarm_handler.so: $(patsubst %.cpp, %.o, ${ALARM_SOURCES})
 
 # Makefile for Clearwater infrastructure packages
 
@@ -62,4 +160,99 @@ include build-infra/cw-deb.mk
 deb: sprout_handler.so bono_handler.so homestead_handler.so alarm_handler.so deb-only
 
 .PHONY: all deb-only deb
+
+
+.PHONY: test
+test: run_test coverage vg coverage-check vg-check
+
+# Run the test.  You can set EXTRA_TEST_ARGS to pass extra arguments
+# to the test, e.g.,
+#
+#   make EXTRA_TEST_ARGS=--gtest_filter=StatefulProxyTest* run_test
+#
+# runs just the StatefulProxyTest tests.
+#
+# Ignore failure here; it will be detected by Jenkins.
+.PHONY: run_test
+run_test: build_test | $(TEST_OUT_DIR)
+	rm -f $(TEST_XML)
+	rm -f $(OBJ_DIR_TEST)/*.gcda
+	$(TARGET_BIN_TEST) $(EXTRA_TEST_ARGS) --gtest_output=xml:$(TEST_XML)
+
+.PHONY: coverage
+coverage: | run_test
+	$(GCOVR) $(COVERAGEFLAGS) --xml > $(COVERAGE_XML)
+
+# Check that we have 100% coverage of all files except those that we
+# have declared we're being relaxed on.  In particular, all new files
+# must have 100% coverage or be added to $(COVERAGE_MASTER_LIST).
+# The string "Marking build unstable" is recognised by the CI scripts
+# and if it is found the build is marked unstable.
+.PHONY: coverage-check
+coverage-check: | coverage
+	@xmllint --xpath '//class[@line-rate!="1.0"]/@filename' $(COVERAGE_XML) \
+                | tr ' ' '\n' \
+                | grep filename= \
+                | cut -d\" -f2 \
+                | sort > $(COVERAGE_LIST_TMP)
+	@sort $(COVERAGE_MASTER_LIST) | comm -23 $(COVERAGE_LIST_TMP) - > $(COVERAGE_LIST)
+	@if grep -q ^ $(COVERAGE_LIST) ; then \
+                echo "Error: some files unexpectedly have less than 100% code coverage:" ; \
+                cat $(COVERAGE_LIST) ; \
+                /bin/false ; \
+                echo "Marking build unstable." ; \
+        fi
+
+# Get quick coverage data at the command line. Add --branches to get branch info
+# instead of line info in report.  *.gcov files generated in current directory
+# if you need to see full detail.
+.PHONY: coverage_raw
+coverage_raw: | run_test
+	$(GCOVR) $(COVERAGEFLAGS) --keep
+
+.PHONY: debug
+debug: | build_test
+	gdb --args $(TARGET_BIN_TEST) $(EXTRA_TEST_ARGS)
+
+# Don't run VG against death tests; they don't play nicely.
+# Be aware that running this will count towards coverage.
+# Don't send output to console, or it might be confused with the full
+# unit-test run earlier.
+# Test failure should not lead to build failure - instead we observe
+# test failure from Jenkins.
+.PHONY: vg
+vg: | build_test
+	-valgrind --xml=yes --xml-file=$(VG_XML) $(VGFLAGS) \
+          $(TARGET_BIN_TEST) --gtest_filter='-*DeathTest*' $(EXTRA_TEST_ARGS) > $(VG_OUT) 2>&1
+
+# Check whether there were any errors from valgrind. Output to screen any errors found,
+# and details of where to find the full logs.
+# The output file will contain <error><kind>ERROR</kind></error>, or 'XPath set is empty'
+# if there are no errors.
+.PHONY: vg-check
+vg-check: | vg
+	@xmllint --xpath '//error/kind' $(VG_XML) 2>&1 | \
+                sed -e 's#<kind>##g' | \
+                sed -e 's#</kind>#\n#g' | \
+                sort > $(VG_LIST)
+	@if grep -q -v "XPath set is empty" $(VG_LIST) ; then \
+                echo "Error: some memory errors have been detected" ; \
+                cat $(VG_LIST) ; \
+                echo "See $(VG_XML) for further details." ; \
+        fi
+
+.PHONY: vg_raw
+vg_raw: | build_test
+	-valgrind --gen-suppressions=all --show-reachable=yes $(VGFLAGS) \
+          $(TARGET_BIN_TEST) --gtest_filter='-*DeathTest*' $(EXTRA_TEST_ARGS)
+
+
+# Build rules for GMock/GTest library.
+$(OBJ_DIR_TEST)/gtest-all.o : $(GTEST_SRCS_)
+	$(CXX) $(CPPFLAGS) -I$(GTEST_DIR) -I$(GTEST_DIR)/include -I$(GMOCK_DIR) -I$(GMOCK_DIR)/include \
+            -c $(GTEST_DIR)/src/gtest-all.cc -o $@
+
+$(OBJ_DIR_TEST)/gmock-all.o : $(GMOCK_SRCS_)
+	$(CXX) $(CPPFLAGS) -I$(GTEST_DIR) -I$(GTEST_DIR)/include -I$(GMOCK_DIR) -I$(GMOCK_DIR)/include \
+            -c $(GMOCK_DIR)/src/gmock-all.cc -o $@
 
