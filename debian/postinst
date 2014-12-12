@@ -62,6 +62,7 @@ case "$1" in
     sed -ie '/^case/i \
 SNMPDOPTS="$SNMPDOPTS -f"
 '  /etc/init.d/snmpd
+    sed -ie 's/#agentXSocket    tcp:localhost:705/agentXSocket    tcp:localhost:705/' /etc/snmp/snmpd.conf
     rm -f /etc/init.d/snmpde
 
     service snmpd restart || true
