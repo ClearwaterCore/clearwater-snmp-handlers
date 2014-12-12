@@ -54,6 +54,9 @@ extern "C" {
 #include <unistd.h>
 #include <errno.h>
 #include <sys/prctl.h>
+#include <netdb.h>
+
+#define AGENTX_UNIX 0
 
 #define __NAMER__(x, y) x##y
 #define NAMER(x, y) __NAMER__(x, y)
@@ -91,7 +94,7 @@ extern "C" {
   {
     if (pri == LOG_WARNING)
     {
-      static const char* warn="Warning: Failed to connect to the agentx master agent (/var/agentx/master)";
+      static const char* warn="Warning: Failed to connect to the agentx master agent";
       static int wlen=strlen(warn);
       if (strncmp(str, warn, wlen) == 0)
       {
@@ -114,7 +117,8 @@ extern "C" {
     snmp_enable_syslog_ident(STR(AGENTX_NAME), LOG_DAEMON);
     netsnmp_ds_set_boolean(NETSNMP_DS_APPLICATION_ID, NETSNMP_DS_AGENT_ROLE, 1);
     netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_DONT_READ_CONFIGS, 1);
-    netsnmp_ds_set_string(NETSNMP_DS_APPLICATION_ID, NETSNMP_DS_AGENT_X_SOCKET, "/var/agentx/master");
+    //netsnmp_ds_set_string(NETSNMP_DS_APPLICATION_ID, NETSNMP_DS_AGENT_X_SOCKET, "/var/agentx/master");
+    netsnmp_ds_set_string(NETSNMP_DS_APPLICATION_ID, NETSNMP_DS_AGENT_X_SOCKET, "tcp:localhost:705");
     netsnmp_ds_set_string(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_COMMUNITY, "clearwater");
 
     SOCK_STARTUP;
@@ -127,18 +131,36 @@ extern "C" {
     // reasons unknown, our agent can't connect to SNMPD, so this code was added to
     // detect the problem early on and recover.
     //
+#if AGENTX_UNIX
     int sock=socket(PF_UNIX, SOCK_STREAM, 0);
+#else
+    int sock = socket(AF_INET, SOCK_STREAM, 0);
+#endif
     snmp_log(LOG_INFO, "%s %s:%d socket()=%d(%d=%s)...\n", STR(AGENTX_NAME), __FILE__,  __LINE__, sock, errno, strerror(errno));
     int i=0;
     for(i=0; i < 5; i++)
     {
+#if AGENTX_UNIX
       struct sockaddr_un addr;
       addr.sun_family=AF_FILE;
       strcpy(addr.sun_path, "/var/agentx/master");
       int csock=connect(sock, (struct sockaddr*)&addr, sizeof(addr));
+#else
+      struct sockaddr_in addr;
+      struct hostent *server;
+
+      server = gethostbyname("localhost");
+      bzero((char *) &addr, sizeof(addr));
+      addr.sin_family = AF_INET;
+      bcopy((char *)server->h_addr, 
+            (char *)&addr.sin_addr.s_addr,
+            server->h_length);
+      addr.sin_port = htons(705);
+      int csock=connect(sock, (struct sockaddr *) &addr, sizeof(addr));
+#endif
       if (csock == -1 && errno == EACCES)
       {
-        snmp_log(LOG_ERR, "%s %s:%d can't access /var/agentx/master! Exiting...\n", STR(AGENTX_NAME), __FILE__,  __LINE__);
+        snmp_log(LOG_ERR, "%s %s:%d can't access /var/agentx/master! Exiting...\n", STR(AGENTX_NAME), __FILE__,  __LINE__, i);
         kill(getpid(), SIGKILL);
       }
       snmp_log(LOG_INFO, "%s %s:%d connect()=%d(%d=%s)...\n", STR(AGENTX_NAME),
