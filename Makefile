@@ -31,6 +31,8 @@
 # under which the OpenSSL Project distributes the OpenSSL toolkit software,
 # as those licenses appear in the file LICENSE-OPENSSL.
 
+STATS_SOURCE := custom_handler.cpp oid.cpp oidtree.cpp oid_inet_addr.cpp zmq_listener.cpp zmq_message_handler.cpp
+STATS_OBJ := $(patsubst %.cpp, %.o, ${STATS_SOURCE})
 
 # this should come first so make does the right thing by default
 all: deb
@@ -54,6 +56,8 @@ TARGET_SOURCES := alarmdefinition.cpp \
                   alarm_trap_sender.cpp \
                   alarm_model_table.cpp \
                   itu_alarm_table.cpp 
+
+ALARM_SOURCES := ${TARGET_SOURCES}
 
 TARGET_SOURCES_TEST := test_main.cpp \
                        alarm.cpp \
@@ -123,26 +127,32 @@ GMOCK_SRCS_ := $(GMOCK_DIR)/src/*.cc $(GMOCK_HEADERS)
 
 include ${MK_DIR}/platform.mk
 
-sprout_handler.so: *.cpp *.hpp
-	g++ `net-snmp-config --cflags` -Wall -std=c++0x -g -O0 -fPIC -shared -o sprout_handler.so custom_handler.cpp oid.cpp oidtree.cpp oid_inet_addr.cpp sproutdata.cpp zmq_listener.cpp zmq_message_handler.cpp `net-snmp-config --libs` -lzmq -lpthread
+net-snmp-5.4.3: net-snmp-5.4.3.tgz
+	tar xvzf $<
 
-bono_handler.so: *.cpp *.hpp
-	g++ `net-snmp-config --cflags` -Wall -std=c++0x -g -O0 -fPIC -shared -o bono_handler.so custom_handler.cpp oid.cpp oidtree.cpp oid_inet_addr.cpp bonodata.cpp zmq_listener.cpp zmq_message_handler.cpp `net-snmp-config --libs` -lzmq -lpthread
+net-snmp-5.4.3/agent/helpers/.libs/libnetsnmphelpers.a net-snmp-5.4.3/snmplib/.libs/libnetsnmp.a net-snmp-5.4.3/agent/.libs/libnetsnmpagent.a: net-snmp-5.4.3
+	( cd $^;./configure --disable-embedded-perl --with-pic < /dev/null; make snmplib agent)
 
-homestead_handler.so: *.cpp *.hpp
-	g++ `net-snmp-config --cflags` -Wall -std=c++0x -g -O0 -fPIC -shared -o homestead_handler.so custom_handler.cpp oid.cpp oidtree.cpp oid_inet_addr.cpp homesteaddata.cpp zmq_listener.cpp zmq_message_handler.cpp `net-snmp-config --libs` -lzmq -lpthread
+%.o: %.cpp
+	g++ `net-snmp-config --cflags` -Wall -std=c++0x -g -O0 -fPIC $(ALARM_INCLUDES) -c -o $@ $^
 
-cdiv_handler.so: *.cpp *.hpp
-	g++ `net-snmp-config --cflags` -Wall -std=c++0x -g -O0 -fPIC -shared -o cdiv_handler.so custom_handler.cpp oid.cpp oidtree.cpp oid_inet_addr.cpp cdivdata.cpp zmq_listener.cpp zmq_message_handler.cpp `net-snmp-config --libs` -lzmq -lpthread
+%.so: net-snmp-5.4.3/agent/helpers/.libs/libnetsnmphelpers.a net-snmp-5.4.3/snmplib/.libs/libnetsnmp.a net-snmp-5.4.3/agent/.libs/libnetsnmpagent.a agentx_handler.cpp agentx_launcher.cpp
+	g++ `net-snmp-config --cflags` -DAGENTX_NAME=$(basename $@) -Wall -std=c++0x -g -O0 -fPIC -shared $(ALARM_INCLUDES) -o $@ `net-snmp-config --libs` agentx_launcher.cpp ${ALARM_OBJS} -lzmq -lpthread -lcrypto -lperl
+	g++ `net-snmp-config --cflags` -DAGENTX_NAME=$(basename $@) -Wall -std=c++0x -g -O0 -fPIC $(ALARM_INCLUDES) -o snmp_$(basename $@)  -Wl,-Bsymbolic-functions -Wl,-z,relro -Lnet-snmp-5.4.3/snmplib/.libs -Lnet-snmp-5.4.3/agent/.libs -Lnet-snmp-5.4.3/agent/helpers/.libs -Wl,-Bstatic -Wl,--start-group agentx_handler.cpp $(patsubst %.cpp,,$^) -lnetsnmp -lnetsnmpagent -lnetsnmphelpers -Wl,--end-group -Wl,-Bdynamic -lzmq -lpthread -lcrypto -ldl
 
-alarm_handler.so: *.cpp *.hpp
-	g++ `net-snmp-config --cflags` -Wall -std=c++0x -g -O0 -fPIC -shared ${ALARM_INCLUDES} -o alarm_handler.so alarm_handler.cpp modules/cpp-common/src/alarmdefinition.cpp alarm_table_defs.cpp alarm_model_table.cpp alarm_req_listener.cpp alarm_trap_sender.cpp itu_alarm_table.cpp `net-snmp-config --libs` -lzmq -lpthread
+sprout_handler.so: ${STATS_OBJ} sproutdata.o
 
-memento_as_handler.so: *.cpp *.hpp
-	g++ `net-snmp-config --cflags` -Wall -std=c++0x -g -O0 -fPIC -shared -o memento_as_handler.so custom_handler.cpp oid.cpp oidtree.cpp oid_inet_addr.cpp mementoasdata.cpp zmq_listener.cpp zmq_message_handler.cpp `net-snmp-config --libs` -lzmq -lpthread
+bono_handler.so: ${STATS_OBJ} bonodata.o
 
-memento_handler.so: *.cpp *.hpp
-	g++ `net-snmp-config --cflags` -Wall -std=c++0x -g -O0 -fPIC -shared -o memento_handler.so custom_handler.cpp oid.cpp oidtree.cpp oid_inet_addr.cpp mementodata.cpp zmq_listener.cpp zmq_message_handler.cpp `net-snmp-config --libs` -lzmq -lpthread
+homestead_handler.so: ${STATS_OBJ} homesteaddata.o
+
+cdiv_handler.so: ${STATS_OBJ} cdivdata.o
+
+alarm_handler.so: $(patsubst %.cpp, %.o, ${ALARM_SOURCES})
+
+memento_as_handler.so: ${STATS_OBJ} mementoasdata.o
+
+memento_handler.so: ${STATS_OBJ} mementodata.o
 
 # Makefile for Clearwater infrastructure packages
 

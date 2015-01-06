@@ -12,5 +12,9 @@
 *.la
 *.a
 
+*_handler
+
+net-snmp-5.4.3/
+
 debian/copyright
 build

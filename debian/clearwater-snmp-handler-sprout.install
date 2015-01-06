@@ -1,1 +1,3 @@
 sprout_handler.so /usr/lib/clearwater/
+snmp_sprout_handler /usr/share/clearwater/bin
+
