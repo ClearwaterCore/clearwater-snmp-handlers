@@ -1,1 +1,2 @@
 bono_handler.so /usr/lib/clearwater/
+snmp_bono_handler /usr/share/clearwater/bin
