@@ -123,8 +123,7 @@ bool AlarmReqListener::zmq_init_sck()
     return false;
   }
 
-  std::stringstream ss;
-  ss << "tcp://127.0.0.1:" << ZMQ_PORT; 
+  std::string ss = std::string("ipc:///var/run/clearwater/alarms");
 
   int rc;
   while (((rc = zmq_bind(_sck, ss.str().c_str())) == -1) && (errno == EINTR))
