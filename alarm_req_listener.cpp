@@ -126,7 +126,7 @@ bool AlarmReqListener::zmq_init_sck()
   std::string ss = std::string("ipc:///var/run/clearwater/alarms");
 
   int rc;
-  while (((rc = zmq_bind(_sck, ss.str().c_str())) == -1) && (errno == EINTR))
+  while (((rc = zmq_bind(_sck, ss.c_str())) == -1) && (errno == EINTR))
   {
     // Ignore possible errors due to a syscall being interrupted by a signal.
   }
