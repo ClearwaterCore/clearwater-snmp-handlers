@@ -36,6 +36,7 @@
 #include <zmq.h>
 
 #include <sstream>
+#include <sys/stat.h>
 
 #include <net-snmp/net-snmp-config.h>
 #include <net-snmp/net-snmp-includes.h>
@@ -123,9 +124,16 @@ bool AlarmReqListener::zmq_init_sck()
     return false;
   }
 
-  std::string ss = std::string("ipc:///var/run/clearwater/alarms");
+  std::string sf = std::string("/var/run/clearwater/alarms");
+  std::string ss = std::string("ipc://" + sf);
+  snmp_log(LOG_INFO, "AlarmReqListener: ss='%s'", ss.c_str());
 
   int rc;
+  rc=unlink(sf.c_str());
+  if (rc = -1)
+  {
+      snmp_log(LOG_ERR, "unlink(%s) failed: %s", sf.c_str(), strerror(errno));
+  }
   while (((rc = zmq_bind(_sck, ss.c_str())) == -1) && (errno == EINTR))
   {
     // Ignore possible errors due to a syscall being interrupted by a signal.
@@ -135,6 +143,12 @@ bool AlarmReqListener::zmq_init_sck()
   {
     snmp_log(LOG_ERR, "zmq_bind failed: %s", zmq_strerror(errno));
     return false;
+  }
+
+  rc=chmod(sf.c_str(), 0777);
+  if (rc = -1)
+  {
+      snmp_log(LOG_ERR, "chmod(%s, 0777) failed: %s", sf.c_str(), strerror(errno));
   }
 
   return true;
