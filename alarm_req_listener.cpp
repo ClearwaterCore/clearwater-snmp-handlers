@@ -37,6 +37,8 @@
 
 #include <sstream>
 #include <sys/stat.h>
+#include <sys/types.h>
+#include <signal.h>
 
 #include <net-snmp/net-snmp-config.h>
 #include <net-snmp/net-snmp-includes.h>
@@ -129,10 +131,18 @@ bool AlarmReqListener::zmq_init_sck()
   snmp_log(LOG_INFO, "AlarmReqListener: ss='%s'", ss.c_str());
 
   int rc;
-  rc=unlink(sf.c_str());
-  if (rc = -1)
+  rc=remove(sf.c_str());
+  if (rc == -1)
   {
-      snmp_log(LOG_ERR, "unlink(%s) failed: %s", sf.c_str(), strerror(errno));
+      if (errno != ENOENT)
+      {
+          snmp_log(LOG_ERR, "remove(%s) failed: %s - killing myself", sf.c_str(), strerror(errno));
+          kill(getpid(), SIGKILL);
+      }
+      else
+      {
+          snmp_log(LOG_ERR, "remove(%s) failed: %s", sf.c_str(), strerror(errno));
+      }
   }
   while (((rc = zmq_bind(_sck, ss.c_str())) == -1) && (errno == EINTR))
   {
@@ -146,7 +156,7 @@ bool AlarmReqListener::zmq_init_sck()
   }
 
   rc=chmod(sf.c_str(), 0777);
-  if (rc = -1)
+  if (rc == -1)
   {
       snmp_log(LOG_ERR, "chmod(%s, 0777) failed: %s", sf.c_str(), strerror(errno));
   }
