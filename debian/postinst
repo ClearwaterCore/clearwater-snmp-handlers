@@ -58,8 +58,12 @@ case "$1" in
     sed -ie 's#start-stop-daemon[[:space:]]*--quiet[[:space:]]*--start[[:space:]]*--oknodo[[:space:]]*--exec[[:space:]]*/usr/sbin/snmpd#start-stop-daemon -b --quiet --start --oknodo --exec /usr/sbin/snmpd#' /etc/init.d/snmpd
     sed -ie 's#start-stop-daemon[[:space:]]*--quiet[[:space:]]*--start[[:space:]]*--exec[[:space:]]*/usr/sbin/snmpd#start-stop-daemon -b --quiet --start --exec /usr/sbin/snmpd#' /etc/init.d/snmpd
     sed -ie '/SNMPDOPTS="$SNMPDOPTS -f"/d' /etc/init.d/snmpd
+    sed -ie '#mkdir -p /var/run/clearwater/stats#d' /etc/init.d/snmpd
+    sed -ie '#chmod -fR 0777 /var/run/clearwater#d' /etc/init.d/snmpd
     sed -ie 's#--stop --oknodo#--stop --retry=TERM/30/KILL/5 --oknodo#' /etc/init.d/snmpd
     sed -ie '/^case/i \
+mkdir -p /var/run/clearwater/stats || true\
+chmod -fR 0777 /var/run/clearwater || true\
 SNMPDOPTS="$SNMPDOPTS -f"
 '  /etc/init.d/snmpd
     sed -ie 's/#agentXSocket    tcp:localhost:705/agentXSocket    tcp:localhost:705/' /etc/snmp/snmpd.conf
