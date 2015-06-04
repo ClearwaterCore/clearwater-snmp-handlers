@@ -42,6 +42,8 @@
 #                      ($(TEST_OUT_DIR)/coverage.xml)
 #
 
+LDFLAGS_TEST := -ldl
+
 # Assumes ROOT has been set and points to the root of the repo
 MK_DIR ?= ${ROOT}/mk
 
