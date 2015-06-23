@@ -98,7 +98,10 @@ int clearwater_handler(netsnmp_mib_handler* handler,
   {
     for(request = requests; request; request = request->next)
     {
-      OID this_oid(requests->requestvb->name, requests->requestvb->name_length);
+      char buf[64];
+      OID this_oid(request->requestvb->name, request->requestvb->name_length);
+      snprint_objid(buf, sizeof(buf),
+                    this_oid.get_ptr(), this_oid.get_len());
       int outval;
       unsigned int retval;
       OID outoid;
@@ -114,6 +117,7 @@ int clearwater_handler(netsnmp_mib_handler* handler,
       case MODE_GET:
         if (tree.get(this_oid, outval))
         {
+          snmp_log(LOG_INFO, "Answering GET request for OID %s with value %d", buf, outval);
           retval = outval;
           snmp_set_var_typed_value(var, ASN_UNSIGNED,
                                    (u_char*)&retval,
@@ -123,6 +127,10 @@ int clearwater_handler(netsnmp_mib_handler* handler,
       case MODE_GETNEXT:
         if (tree.get_next(this_oid, outoid, outval))
         {
+          char buf2[64];
+          snprint_objid(buf, sizeof(buf),
+                    outoid.get_ptr(), outoid.get_len());
+          snmp_log(LOG_INFO, "Answering GETNEXT request for OID %s with OID %s and value %d", buf, buf2, outval);
           retval = outval;
           snmp_set_var_objid(var,
                              outoid.get_ptr(),
