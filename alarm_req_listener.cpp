@@ -153,9 +153,18 @@ bool AlarmReqListener::zmq_init_sck()
 
   if (rc == -1)
   {
+    // LCOV_EXCL_START
+#ifndef UNIT_TEST
+    snmp_log(LOG_ERR, "zmq_bind(.., %s) failed: %s - killing myself", sck_url.c_str(), zmq_strerror(errno));
+    kill(getpid(), SIGKILL);
+#else
     snmp_log(LOG_ERR, "zmq_bind failed: %s", zmq_strerror(errno));
+#endif
+    // LCOV_EXCL_STOP
     return false;
   }
+  
+  snmp_log(LOG_INFO, "zmq_bind(.., %s) succeeded", sck_url.c_str());
 
   rc=chmod(sck_file.c_str(), 0777);
   if (rc == -1)
