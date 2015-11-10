@@ -181,7 +181,7 @@ bool AlarmReqListener::zmq_init_sck()
     if (rc == -1)
     {
       snmp_log(LOG_ERR, "chmod(%s, 0777) failed: %s", sck_file.c_str(), strerror(errno));
-      zmq_bind(_sck, sck_url.c_str());
+      zmq_unbind(_sck, sck_url.c_str());
     }
 #endif
   }
