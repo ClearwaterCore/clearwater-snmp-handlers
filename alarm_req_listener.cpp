@@ -132,7 +132,7 @@ bool AlarmReqListener::zmq_init_sck()
   std::string sck_url = std::string("ipc://" + sck_file);
   snmp_log(LOG_INFO, "AlarmReqListener: ss='%s'", sck_url.c_str());
 
-  int rc = -1, retry_cnt = 0, max_retry = 6;
+  int rc = -1, retry_cnt = 0, max_retry = 10;
 
 #ifdef UNIT_TEST
   max_retry = 1;
@@ -143,7 +143,7 @@ bool AlarmReqListener::zmq_init_sck()
     if (retry_cnt > 0)
     {
       // LCOV_EXCL_START
-      sleep(5);// Give it another shot in 5 seconds.
+      sleep(1);// Give it another shot after delay
       // LCOV_EXCL_STOP
     }
 
