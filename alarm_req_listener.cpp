@@ -133,42 +133,74 @@ bool AlarmReqListener::zmq_init_sck()
   std::string sck_url = std::string("ipc://" + sck_file);
   TRC_INFO("AlarmReqListener: ss='%s'", sck_url.c_str());
 
-  int rc = remove(sck_file.c_str());
+  int rc = -1, retry_cnt = 0, max_retry = 10;
 
-  if (rc == -1)
+#ifdef UNIT_TEST
+  max_retry = 1;
+#endif
+
+  for (retry_cnt=0; retry_cnt < max_retry && rc == -1; retry_cnt++ )
   {
-    TRC_ERROR("remove(%s) failed: %s", sck_file.c_str(), strerror(errno));
-
-    if (errno != ENOENT)
+    if (retry_cnt > 0)
     {
       // LCOV_EXCL_START
-      return false;
+      sleep(1);// Give it another shot after delay
       // LCOV_EXCL_STOP
     }
-  }
 
-  while (((rc = zmq_bind(_sck, sck_url.c_str())) == -1) && (errno == EINTR))
-  {
-    // Ignore possible errors due to a syscall being interrupted by a signal.
-  }
+    // First try to remove the socket file
+    rc = remove(sck_file.c_str());
+    if (rc == -1)
+    {
+      if (errno != ENOENT)
+      {
+        // LCOV_EXCL_START
+        TRC_ERROR("remove(%s) failed: %s", sck_file.c_str(), strerror(errno));
+        continue;
+        // LCOV_EXCL_STOP
+      }
+      TRC_ERROR("remove(%s) ignored: %s", sck_file.c_str(), strerror(errno));
+    }
 
-  if (rc == -1)
-  {
-    TRC_ERROR("zmq_bind failed: %s", zmq_strerror(errno));
-    return false;
-  }
+    // Any old file has been cleaned up, so try to bind
+    while (((rc = zmq_bind(_sck, sck_url.c_str())) == -1) && (errno == EINTR))
+    {
+      // Ignore possible errors due to a syscall being interrupted by a signal.
+    }
+    if (rc == -1)
+    {
+      TRC_ERROR("zmq_bind failed: %s", zmq_strerror(errno));
+      continue;
+    }
+    else
+    {
+      break;
+    }
 
-  rc=chmod(sck_file.c_str(), 0777);
-  if (rc == -1)
-  {
-    TRC_ERROR("chmod(%s, 0777) failed: %s", sck_file.c_str(), strerror(errno));
-    // We don't return false in UT as the chmod always fails (because the
-    // previous zmq calls are mocked out the socket file isn't created so can't
-    // be chmodded).
 #ifndef UNIT_TEST
-    return false;
+    rc=chmod(sck_file.c_str(), 0777);
+    if (rc == -1)
+    {
+      TRC_ERROR("chmod(%s, 0777) failed: %s", sck_file.c_str(), strerror(errno));
+      zmq_unbind(_sck, sck_url.c_str());
+    }
 #endif
   }
+
+  if (rc == -1)
+  {
+    // LCOV_EXCL_START
+#ifndef UNIT_TEST
+    TRC_ERROR("zmq failed to bind %d times - killing myself", retry_cnt);
+    kill(getpid(), SIGKILL);
+#else
+    TRC_ERROR("zmq failed to bind %d times", retry_cnt);
+#endif
+    // LCOV_EXCL_STOP
+    return false;
+  }
+  
+  TRC_ERROR("zmq socket initialized after %d tries", retry_cnt + 1);
 
   return true;
 }
