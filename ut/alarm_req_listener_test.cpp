@@ -54,6 +54,7 @@
 #include "test_interposer.hpp"
 
 using ::testing::_;
+using ::testing::A;
 using ::testing::Return;
 using ::testing::ReturnNull;
 using ::testing::InSequence;
@@ -61,9 +62,90 @@ using ::testing::MakeMatcher;
 using ::testing::Matcher;
 using ::testing::MatcherInterface;
 using ::testing::MatchResultListener;
+using ::testing::SaveArg;
+using ::testing::Invoke;
 
 static const char issuer1[] = "sprout";
 static const char issuer2[] = "homestead";
+
+class TrapVarsMatcher : public MatcherInterface<netsnmp_variable_list*> {
+public:
+  enum TrapType
+  {
+    UNDEFINED,
+    CLEAR,
+    ACTIVE
+  };
+
+  enum OctetIndices
+  {
+    LAST_TRAP_OID_OCTET = 8,
+    ALARM_IDX_ROW_OID_OCTET = 13
+  };
+
+  explicit TrapVarsMatcher(TrapType trap_type,
+                           unsigned int alarm_index) :
+      _trap_type(trap_type),
+      _alarm_index(alarm_index) {}
+
+  virtual bool MatchAndExplain(netsnmp_variable_list* vl,
+                               MatchResultListener* listener) const {
+    TrapType type = UNDEFINED;
+    unsigned int index;
+
+    if (vl->val.objid[LAST_TRAP_OID_OCTET] == 3)
+    {
+      type = CLEAR;
+    }
+    else if (vl->val.objid[LAST_TRAP_OID_OCTET] == 2)
+    {
+      type = ACTIVE;
+    }
+
+    vl = vl->next_variable;
+
+    if (vl != NULL)
+    {
+      index = vl->val.objid[ALARM_IDX_ROW_OID_OCTET];
+    }
+
+    return (_trap_type == type) && (_alarm_index == index);
+  }
+
+  virtual void DescribeTo(::std::ostream* os) const {
+    *os << "trap is " << _alarm_index << ((_trap_type == CLEAR) ? " CLEAR" : " ACTIVE");
+  }
+
+  virtual void DescribeNegationTo(::std::ostream* os) const {
+    *os << "trap is not " << _alarm_index << ((_trap_type == CLEAR) ? " CLEAR" : " ACTIVE");
+  }
+ private:
+  TrapType _trap_type;
+  unsigned int _alarm_index;
+};
+
+class SNMPCallbackCollector
+{
+public:
+  void call_all_callbacks()
+  {
+    for (auto ii = _callbacks.begin();
+         ii != _callbacks.end();
+         ++ii)
+    {
+      ii->first(NETSNMP_CALLBACK_OP_RECEIVED_MESSAGE, NULL, 0, NULL, ii->second);
+    }
+    _callbacks.clear();
+  }
+
+  void collect_callback(netsnmp_variable_list* ignored, snmp_callback callback, void* correlator)
+  {
+    _callbacks.emplace_back(callback, correlator);
+  }
+
+private:
+  std::vector<std::pair<snmp_callback, void*>> _callbacks;
+};
 
 class AlarmReqListenerTest : public ::testing::Test
 {
@@ -94,6 +176,11 @@ public:
   static void SetUpTestCase()
   {
     AlarmTableDefs::get_instance().initialize(std::string(UT_DIR).append("/valid_alarms/"));
+  }
+
+  void TearDown()
+  {
+    _collector.call_all_callbacks();
   }
 
   void sync_alarms()
@@ -155,6 +242,7 @@ public:
 private:
   MockNetSnmpInterface _ms;
   CapturingTestLogger _log;
+  SNMPCallbackCollector _collector;
   Alarm _alarm_1;
   Alarm _alarm_2;
   Alarm _alarm_3;
@@ -188,61 +276,12 @@ private:
   int _s;
 };
 
-class TrapVarsMatcher : public MatcherInterface<netsnmp_variable_list*> {
-public:
-  enum TrapType
-  {
-    UNDEFINED,
-    CLEAR,
-    ACTIVE
-  };
-
-  enum OctetIndices
-  {
-    LAST_TRAP_OID_OCTET = 8,
-    ALARM_IDX_ROW_OID_OCTET = 13
-  };
-
-  explicit TrapVarsMatcher(TrapType trap_type,
-                           unsigned int alarm_index) :
-      _trap_type(trap_type),
-      _alarm_index(alarm_index) {}
-
-  virtual bool MatchAndExplain(netsnmp_variable_list* vl,
-                               MatchResultListener* listener) const {
-    TrapType type = UNDEFINED;
-    unsigned int index;
-
-    if (vl->val.objid[LAST_TRAP_OID_OCTET] == 3)
-    {
-      type = CLEAR;
-    }
-    else if (vl->val.objid[LAST_TRAP_OID_OCTET] == 2)
-    {
-      type = ACTIVE;
-    }
-
-    vl = vl->next_variable;
-
-    if (vl != NULL)
-    {
-      index = vl->val.objid[ALARM_IDX_ROW_OID_OCTET];
-    }
-
-    return (_trap_type == type) && (_alarm_index == index);
-  }
-
-  virtual void DescribeTo(::std::ostream* os) const {
-    *os << "trap is " << _alarm_index << ((_trap_type == CLEAR) ? " CLEAR" : " ACTIVE");
-  }
-
-  virtual void DescribeNegationTo(::std::ostream* os) const {
-    *os << "trap is not " << _alarm_index << ((_trap_type == CLEAR) ? " CLEAR" : " ACTIVE");
-  }
- private:
-  TrapType _trap_type;
-  unsigned int _alarm_index;
-};
+// Safely set up an expect call for an SNMP trap send that will succeed.
+#define COLLECT_CALL(CALL) EXPECT_CALL(_ms, CALL).                                \
+  WillOnce(Invoke(&_collector, &SNMPCallbackCollector::collect_callback))
+#define COLLECT_CALLS(N, CALL) EXPECT_CALL(_ms, CALL).                            \
+  Times(N).                                                                       \
+  WillRepeatedly(Invoke(&_collector, &SNMPCallbackCollector::collect_callback))
 
 inline Matcher<netsnmp_variable_list*> TrapVars(TrapVarsMatcher::TrapType trap_type,
                                                 unsigned int alarm_index) {
@@ -251,17 +290,15 @@ inline Matcher<netsnmp_variable_list*> TrapVars(TrapVarsMatcher::TrapType trap_t
 
 TEST_F(AlarmReqListenerTest, ClearAlarmNoSet)
 {
-  EXPECT_CALL(_ms, send_v2trap(TrapVars(TrapVarsMatcher::CLEAR,
-                                        1000)));
+  COLLECT_CALL(send_v2trap(TrapVars(TrapVarsMatcher::CLEAR, 1000), _, _));
 
-  _alarm_1._clear_state.issue();
+  _alarm_1.clear();
   _ms.trap_complete(1, 5);
 }
 
 TEST_F(AlarmReqListenerTest, SetAlarm)
 {
-  EXPECT_CALL(_ms, send_v2trap(TrapVars(TrapVarsMatcher::ACTIVE,
-                                        1000)));
+  COLLECT_CALL(send_v2trap(TrapVars(TrapVarsMatcher::ACTIVE, 1000), _, _));
 
   _alarm_1.set();
   _ms.trap_complete(1, 5);
@@ -279,11 +316,8 @@ TEST_F(AlarmReqListenerTest, SetAlarm)
 TEST_F(AlarmReqListenerTest, ClearAlarm)
 {
   advance_time_ms(AlarmFilter::ALARM_FILTER_TIME + 1);
-  EXPECT_CALL(_ms, send_v2trap(TrapVars(TrapVarsMatcher::CLEAR,
-                                        1000)));
-
+  COLLECT_CALL(send_v2trap(TrapVars(TrapVarsMatcher::CLEAR, 1000), _, _));
   _alarm_1.set();
-
   _alarm_1.clear();
   _ms.trap_complete(1, 5);
 }
@@ -295,13 +329,11 @@ TEST_F(AlarmReqListenerTest, ClearAlarm)
 TEST_F(AlarmReqListenerTest, SetAlarmRepeatedState)
 {
   advance_time_ms(AlarmFilter::ALARM_FILTER_TIME + 1);
-  
+
   {
     InSequence s;
-    EXPECT_CALL(_ms, send_v2trap(TrapVars(TrapVarsMatcher::ACTIVE,
-                                          1000)));
-    EXPECT_CALL(_ms, send_v2trap(TrapVars(TrapVarsMatcher::CLEAR,
-                                          1000)));
+    COLLECT_CALL(send_v2trap(TrapVars(TrapVarsMatcher::ACTIVE, 1000), _, _));
+    COLLECT_CALL(send_v2trap(TrapVars(TrapVarsMatcher::CLEAR, 1000), _, _));
   }
   _alarm_1.set();
   advance_time_ms(30);
@@ -318,15 +350,9 @@ TEST_F(AlarmReqListenerTest, SyncAlarms)
 
   {
     InSequence s;
-
-    EXPECT_CALL(_ms, send_v2trap(TrapVars(TrapVarsMatcher::ACTIVE,
-                                          1000)));
-
-    EXPECT_CALL(_ms, send_v2trap(_)).
-      Times(alarm_count);
-
-    EXPECT_CALL(_ms, send_v2trap(TrapVars(TrapVarsMatcher::ACTIVE,
-                                          1000)));
+    COLLECT_CALL(send_v2trap(TrapVars(TrapVarsMatcher::ACTIVE, 1000), _, _));
+    COLLECT_CALLS(alarm_count, send_v2trap(_, _, _));
+    COLLECT_CALL(send_v2trap(TrapVars(TrapVarsMatcher::ACTIVE, 1000), _, _));
   }
 
   _alarm_1.set();
@@ -342,12 +368,8 @@ TEST_F(AlarmReqListenerTest, SyncAlarmsNoClear)
 
   {
     InSequence s;
-
-    EXPECT_CALL(_ms, send_v2trap(TrapVars(TrapVarsMatcher::ACTIVE,
-                                          1000)));
-
-    EXPECT_CALL(_ms, send_v2trap(TrapVars(TrapVarsMatcher::CLEAR,
-                                          1000)));
+    COLLECT_CALL(send_v2trap(TrapVars(TrapVarsMatcher::ACTIVE, 1000), _, _));
+    COLLECT_CALL(send_v2trap(TrapVars(TrapVarsMatcher::CLEAR, 1000), _, _));
   }
 
   sync_alarms_no_clear();
@@ -365,17 +387,17 @@ TEST_F(AlarmReqListenerTest, AlarmFilter)
   {
     InSequence s;
 
-    EXPECT_CALL(_ms, send_v2trap(TrapVars(TrapVarsMatcher::ACTIVE,
-                                          1000)));
+    COLLECT_CALL(send_v2trap(TrapVars(TrapVarsMatcher::ACTIVE,
+                                      1000), _, _));
 
-    EXPECT_CALL(_ms, send_v2trap(TrapVars(TrapVarsMatcher::CLEAR,
-                                          1000)));
+    COLLECT_CALL(send_v2trap(TrapVars(TrapVarsMatcher::CLEAR,
+                                      1000), _, _));
 
-    EXPECT_CALL(_ms, send_v2trap(TrapVars(TrapVarsMatcher::ACTIVE,
-                                          1001)));
+    COLLECT_CALL(send_v2trap(TrapVars(TrapVarsMatcher::ACTIVE,
+                                      1001), _, _));
 
-    EXPECT_CALL(_ms, send_v2trap(TrapVars(TrapVarsMatcher::CLEAR,
-                                          1001)));
+    COLLECT_CALL(send_v2trap(TrapVars(TrapVarsMatcher::CLEAR,
+                                      1001), _, _));
   }
 
   for (int idx = 0; idx < 10; idx++)
@@ -397,17 +419,17 @@ TEST_F(AlarmReqListenerTest, AlarmFilterClean)
   {
     InSequence s;
 
-    EXPECT_CALL(_ms, send_v2trap(TrapVars(TrapVarsMatcher::ACTIVE,
-                                          1000)));
+    COLLECT_CALL(send_v2trap(TrapVars(TrapVarsMatcher::ACTIVE,
+                                      1000), _, _));
 
-    EXPECT_CALL(_ms, send_v2trap(TrapVars(TrapVarsMatcher::ACTIVE,
-                                          1001)));
+    COLLECT_CALL(send_v2trap(TrapVars(TrapVarsMatcher::ACTIVE,
+                                      1001), _, _));
 
-    EXPECT_CALL(_ms, send_v2trap(TrapVars(TrapVarsMatcher::CLEAR,
-                                          1000)));
+    COLLECT_CALL(send_v2trap(TrapVars(TrapVarsMatcher::CLEAR,
+                                      1000), _, _));
 
-    EXPECT_CALL(_ms, send_v2trap(TrapVars(TrapVarsMatcher::CLEAR,
-                                          1001)));
+    COLLECT_CALL(send_v2trap(TrapVars(TrapVarsMatcher::CLEAR,
+                                      1001), _, _));
   }
 
   _alarm_1.set();
@@ -425,9 +447,53 @@ TEST_F(AlarmReqListenerTest, AlarmFilterClean)
   _ms.trap_complete(2, 5);
 }
 
+TEST_F(AlarmReqListenerTest, AlarmFailedToSend)
+{
+  advance_time_ms(AlarmFilter::CLEAN_FILTER_TIME + 1);
+
+  snmp_callback callback;
+  void* correlator;
+  EXPECT_CALL(_ms, send_v2trap(_, _, _)).
+    WillOnce(DoAll(SaveArg<1>(&callback),
+                   SaveArg<2>(&correlator)));
+  _alarm_1.set();
+  _ms.trap_complete(1, 5);
+
+  // Now report the send as failed
+  COLLECT_CALL(send_v2trap(_, _, _));
+  callback(NETSNMP_CALLBACK_OP_SEND_FAILED, NULL, 2, NULL, correlator);
+  _ms.trap_complete(1, 5);
+
+  COLLECT_CALL(send_v2trap(_, _, _));
+  _alarm_1.clear();
+  _ms.trap_complete(1, 5);
+}
+
+TEST_F(AlarmReqListenerTest, AlarmFailedToSendClearedInInterval)
+{
+  advance_time_ms(AlarmFilter::CLEAN_FILTER_TIME + 1);
+
+  snmp_callback callback;
+  void* correlator;
+  EXPECT_CALL(_ms, send_v2trap(_, _, _)).
+    WillOnce(DoAll(SaveArg<1>(&callback),
+                   SaveArg<2>(&correlator)));
+  _alarm_1.set();
+  _ms.trap_complete(1, 5);
+
+  // Clear the alarm
+  COLLECT_CALL(send_v2trap(_, _, _));
+  _alarm_1.clear();
+  _ms.trap_complete(1, 5);
+
+  // Now report the send as failed which will not attempt to resend the
+  // alarm.
+  callback(NETSNMP_CALLBACK_OP_SEND_FAILED, NULL, 2, NULL, correlator);
+}
+
 TEST_F(AlarmReqListenerTest, InvalidZmqRequest)
 {
-  EXPECT_CALL(_ms, send_v2trap(_)).
+  EXPECT_CALL(_ms, send_v2trap(_, _, _)).
     Times(0);
 
   invalid_zmq_request();
@@ -438,7 +504,7 @@ TEST_F(AlarmReqListenerTest, InvalidZmqRequest)
 
 TEST_F(AlarmReqListenerTest, InvalidAlarmIdentifier)
 {
-  EXPECT_CALL(_ms, send_v2trap(_)).
+  EXPECT_CALL(_ms, send_v2trap(_, _, _)).
     Times(0);
 
   issue_malformed_alarm();
@@ -449,7 +515,7 @@ TEST_F(AlarmReqListenerTest, InvalidAlarmIdentifier)
 
 TEST_F(AlarmReqListenerTest, UnknownAlarmIdentifier)
 {
-  EXPECT_CALL(_ms, send_v2trap(_)).
+  EXPECT_CALL(_ms, send_v2trap(_, _, _)).
     Times(0);
 
   issue_unknown_alarm();
