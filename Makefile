@@ -1,62 +1,76 @@
-#
-# Project Clearwater - IMS in the Cloud
-# Copyright (C) 2013 Metaswitch Networks Ltd
-#
-# This program is free software: you can redistribute it and/or modify it
-# under the terms of the GNU General Public License as published by the
-# Free Software Foundation, either version 3 of the License, or (at your
-# option) any later version, along with the "Special Exception" for use of
-# the program along with SSL, set forth below. This program is distributed
-# in the hope that it will be useful, but WITHOUT ANY WARRANTY;
-# without even the implied warranty of MERCHANTABILITY or FITNESS FOR
-# A PARTICULAR PURPOSE. See the GNU General Public License for more
-# details. You should have received a copy of the GNU General Public
-# License along with this program. If not, see
-# <http://www.gnu.org/licenses/>.
-#
-# The author can be reached by email at clearwater@metaswitch.com or by
-# post at Metaswitch Networks Ltd, 100 Church St, Enfield EN2 6BQ, UK
-#
-# Special Exception
-# Metaswitch Networks Ltd grants you permission to copy, modify,
-# propagate, and distribute a work formed by combining OpenSSL with The
-# Software, or a work derivative of such a combination, even if such
-# copying, modification, propagation, or distribution would otherwise
-# violate the terms of the GPL. You must comply with the GPL in all
-# respects for all of the code used other than OpenSSL.
-# "OpenSSL" means OpenSSL toolkit software distributed by the OpenSSL
-# Project and licensed under the OpenSSL Licenses, or a work based on such
-# software and licensed under the OpenSSL Licenses.
-# "OpenSSL Licenses" means the OpenSSL License and Original SSLeay License
-# under which the OpenSSL Project distributes the OpenSSL toolkit software,
-# as those licenses appear in the file LICENSE-OPENSSL.
-
+# Top level Makefile for building cw_alarm_agent
 
 # this should come first so make does the right thing by default
-all: deb
+all: build
 
-sprout_handler.so: *.cpp *.hpp
-	g++ `net-snmp-config --cflags` -Wall -std=c++0x -g -O0 -fPIC -shared -o sprout_handler.so custom_handler.cpp oid.cpp oidtree.cpp oid_inet_addr.cpp sproutdata.cpp zmq_listener.cpp zmq_message_handler.cpp `net-snmp-config --libs` -lzmq -lpthread
-
-bono_handler.so: *.cpp *.hpp
-	g++ `net-snmp-config --cflags` -Wall -std=c++0x -g -O0 -fPIC -shared -o bono_handler.so custom_handler.cpp oid.cpp oidtree.cpp oid_inet_addr.cpp bonodata.cpp zmq_listener.cpp zmq_message_handler.cpp `net-snmp-config --libs` -lzmq -lpthread
-
-homestead_handler.so: *.cpp *.hpp
-	g++ `net-snmp-config --cflags` -Wall -std=c++0x -g -O0 -fPIC -shared -o homestead_handler.so custom_handler.cpp oid.cpp oidtree.cpp oid_inet_addr.cpp homesteaddata.cpp zmq_listener.cpp zmq_message_handler.cpp `net-snmp-config --libs` -lzmq -lpthread
-
-cdiv_handler.so: *.cpp *.hpp
-	g++ `net-snmp-config --cflags` -Wall -std=c++0x -g -O0 -fPIC -shared -o cdiv_handler.so custom_handler.cpp oid.cpp oidtree.cpp oid_inet_addr.cpp cdivdata.cpp zmq_listener.cpp zmq_message_handler.cpp `net-snmp-config --libs` -lzmq -lpthread
-
-# Makefile for Clearwater infrastructure packages
+ROOT ?= ${PWD}
+MK_DIR := ${ROOT}/mk
+PREFIX ?= ${ROOT}/usr
+INSTALL_DIR ?= ${PREFIX}
+MODULE_DIR := ${ROOT}/modules
 
 DEB_COMPONENT := clearwater-snmp-handlers
 DEB_MAJOR_VERSION := 1.0${DEB_VERSION_QUALIFIER}
-DEB_NAMES := clearwater-snmp-handler-bono clearwater-snmp-handler-sprout clearwater-snmp-handler-homestead clearwater-snmp-handler-cdiv
+DEB_NAMES := clearwater-snmp-handler-cdiv clearwater-snmp-alarm-agent clearwater-snmp-handler-memento-as clearwater-snmp-handler-memento clearwater-snmp-handler-astaire clearwater-snmp-alarm-agent-dbg
+
+# Add dependencies to deb-only (target will be added by build-infra)
+deb-only: cw_alarm_agent cdiv_handler.so memento_handler.so memento_as_handler.so astaire_handler.so
+
+INCLUDE_DIR := ${INSTALL_DIR}/include
+LIB_DIR := ${INSTALL_DIR}/lib
+
+SUBMODULES := 
+
+CW_ALARM_AGENT_DIR := ${ROOT}/src
+CW_ALARM_AGENT_TEST_DIR := ${ROOT}/tests
+
+cw_alarm_agent:
+	${MAKE} -C ${CW_ALARM_AGENT_DIR} $@
+
+cw_alarm_agent_test:
+	${MAKE} -C ${CW_ALARM_AGENT_DIR} test
+
+cw_alarm_agent_full_test:
+	${MAKE} -C ${CW_ALARM_AGENT_DIR} full_test
+
+cw_alarm_agent_clean:
+	${MAKE} -C ${CW_ALARM_AGENT_DIR} clean
+
+cw_alarm_agent_distclean: CW_ALARM_AGENT_clean
+
+cdiv_handler.so:
+	${MAKE} -C ${CW_ALARM_AGENT_DIR} $@
+
+memento_handler.so:
+	${MAKE} -C ${CW_ALARM_AGENT_DIR} $@
+
+memento_as_handler.so:
+	${MAKE} -C ${CW_ALARM_AGENT_DIR} $@
+
+astaire_handler.so:
+	${MAKE} -C ${CW_ALARM_AGENT_DIR} $@
+
+.PHONY: cw_alarm_agent CW_ALARM_AGENT_test cw_alarm_agent_clean cw_alarm_agent_distclean cdiv_handler.so memento_handler.so memento_as_handler.so astaire_handler.so
+build: ${SUBMODULES} cw_alarm_agent
+
+test: ${SUBMODULES} cw_alarm_agent_test
+
+full_test: ${SUBMODULES} cw_alarm_agent_full_test
+
+testall: $(patsubst %, %_test, ${SUBMODULES}) full_test
+
+clean: $(patsubst %, %_clean, ${SUBMODULES}) cw_alarm_agent_clean
+	rm -rf ${ROOT}/usr
+	rm -rf ${ROOT}/build
+
+distclean: $(patsubst %, %_distclean, ${SUBMODULES}) cw_alarm_agent_distclean
+	rm -rf ${ROOT}/usr
+	rm -rf ${ROOT}/build
 
 include build-infra/cw-deb.mk
 
 .PHONY: deb
-deb: sprout_handler.so bono_handler.so homestead_handler.so cdiv_handler.so deb-only
+deb: build deb-only
 
-.PHONY: all deb-only deb
+.PHONY: all build test clean distclean
 

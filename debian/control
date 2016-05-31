@@ -5,26 +5,40 @@ Priority: optional
 # clearwater-infrastructure explicitly checks for packages of this name when
 # updating
 Maintainer: Project Clearwater Maintainers <maintainers@projectclearwater.org>
-Build-Depends: debhelper (>= 8.0.0), build-essential, libsnmp-dev, libboost-dev, libzmq3-dev
+Build-Depends: debhelper (>= 8.0.0), build-essential, libsnmp-dev (= 5.7.2~dfsg-clearwater4), libboost-dev, libzmq3-dev
 Standards-Version: 3.9.2
 Homepage: http://projectclearwater.org/
-
-Package: clearwater-snmp-handler-bono
-Architecture: any
-Depends: clearwater-snmpd
-Description: The SNMP handler library for statistics about Bono
-
-Package: clearwater-snmp-handler-sprout
-Architecture: any
-Depends: clearwater-snmpd
-Description: The SNMP handler library for statistics about Sprout
-
-Package: clearwater-snmp-handler-homestead
-Architecture: any
-Depends: clearwater-snmpd
-Description: The SNMP handler library for statistics about Homestead
 
 Package: clearwater-snmp-handler-cdiv
 Architecture: any
 Depends: clearwater-snmpd
 Description: The SNMP handler library for statistics about the Call Diversion AS
+
+Package: clearwater-snmp-alarm-agent
+Architecture: any
+Breaks: clearwater-snmp-handler-alarm
+Replaces: clearwater-snmp-handler-alarm
+Depends: clearwater-snmpd, libboost-filesystem1.54.0
+Description: The SNMP subagent for Clearwater alarm reporting
+
+Package: clearwater-snmp-alarm-agent-dbg
+Architecture: any
+Section: debug
+Priority: extra
+Depends: clearwater-snmp-alarm-agent (= ${binary:Version}), gdb
+Description: Debugging symbols for the alarm agent
+
+Package: clearwater-snmp-handler-memento-as
+Architecture: any
+Depends: clearwater-snmpd
+Description: The SNMP handler library for statistics about the Memento AS
+
+Package: clearwater-snmp-handler-memento
+Architecture: any
+Depends: clearwater-snmpd
+Description: The SNMP handler library for statistics about Memento
+
+Package: clearwater-snmp-handler-astaire
+Architecture: any
+Depends: clearwater-snmpd
+Description: The SNMP handler library for statistics about Astaire

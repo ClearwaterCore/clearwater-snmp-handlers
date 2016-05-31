@@ -1,0 +1,2 @@
+build/bin/cw_alarm_agent /usr/share/clearwater/bin
+clearwater-snmp-alarm-agent.root/* /

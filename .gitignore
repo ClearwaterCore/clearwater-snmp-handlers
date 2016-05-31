@@ -12,4 +12,12 @@
 *.la
 *.a
 
+# Dependency files
+/*.d
+
 debian/copyright
+build
+cw_alarm_agent
+
+# FV tests
+fvtest-snmpd.out
