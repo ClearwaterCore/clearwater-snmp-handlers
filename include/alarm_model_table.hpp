@@ -39,8 +39,8 @@
  *  $Id:$
  */
 
-#ifndef ITU_ALARM_TABLE_HPP
-#define ITU_ALARM_TABLE_HPP
+#ifndef ALARM_MODEL_TABLE_HPP
+#define ALARM_MODEL_TABLE_HPP
 
 #include <alarm_table_defs.hpp>
 #include "oid_definitions.hpp"
@@ -49,37 +49,42 @@
 extern "C" {
 #endif
 
-typedef struct ituAlarmTable_context_s {
+typedef struct alarmModelTable_context_s {
     netsnmp_index _index; /** THIS MUST BE FIRST!!! */
 
     AlarmTableDef* _alarm_table_def;
 
-} ituAlarmTable_context;
+} alarmModelTable_context;
 
-void init_ituAlarmTable(void);
-int initialize_table_ituAlarmTable(void);
-int ituAlarmTable_get_value(netsnmp_request_info*, netsnmp_index*, netsnmp_table_request_info*);
+void init_alarmModelTable(AlarmTableDefs& defs);
+int initialize_table_alarmModelTable(void);
+int alarmModelTable_get_value(netsnmp_request_info*, netsnmp_index*, netsnmp_table_request_info*);
 
-ituAlarmTable_context* ituAlarmTable_create_row_context(char*, unsigned long, long);
-int ituAlarmTable_index_to_oid(char*, unsigned long, long, netsnmp_index*);
-void ituAlarmTable_insert_defs(void);
+alarmModelTable_context* alarmModelTable_create_row_context(char*, unsigned long, unsigned long);
+int alarmModelTable_index_to_oid(char*, unsigned long, unsigned long, netsnmp_index*);
+void alarmModelTable_insert_defs(AlarmTableDefs& defs);
 
 /*************************************************************
  *
- *  column number definitions for table ituAlarmTable
+ *  column number definitions for table alarmModelTable
  */
-#define COLUMN_ITUALARMPERCEIVEDSEVERITY 1
-#define COLUMN_ITUALARMEVENTTYPE 2
-#define COLUMN_ITUALARMPROBABLECAUSE 3
-#define COLUMN_ITUALARMADDITIONALTEXT 4
-#define COLUMN_ITUALARMGENERICMODEL 5
-#define ituAlarmTable_COL_MIN 2
-#define ituAlarmTable_COL_MAX 5
+#define COLUMN_ALARMMODELINDEX 1
+#define COLUMN_ALARMMODELSTATE 2
+#define COLUMN_ALARMMODELNOTIFICATIONID 3
+#define COLUMN_ALARMMODELVARBINDINDEX 4
+#define COLUMN_ALARMMODELVARBINDVALUE 5
+#define COLUMN_ALARMMODELDESCRIPTION 6
+#define COLUMN_ALARMMODELSPECIFICPOINTER 7
+#define COLUMN_ALARMMODELVARBINDSUBTREE 8
+#define COLUMN_ALARMMODELRESOURCEPREFIX 9
+#define COLUMN_ALARMMODELROWSTATUS 10
+#define alarmModelTable_COL_MIN 3
+#define alarmModelTable_COL_MAX 10
 
-#define IANAITUEVENTTYPE_OPERATIONALVIOLATION 8
+#define ROWSTATUS_ACTIVE 1
 
-#define ALARMMODELTABLEROW_INDEX 13
-#define ALARMMODELTABLEROW_STATE 14
+#define ITUALARMTABLEROW_INDEX 13
+#define ITUALARMTABLEROW_SEVERITY 14
 
 #ifdef __cplusplus
 }

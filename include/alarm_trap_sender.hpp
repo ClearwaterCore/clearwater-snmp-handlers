@@ -32,59 +32,59 @@
 * as those licenses appear in the file LICENSE-OPENSSL.
 */
 
-#ifndef ALARM_REQ_LISTENER_HPP
-#define ALARM_REQ_LISTENER_HPP
+#ifndef ALARM_TRAPS_HPP
+#define ALARM_TRAPS_HPP
 
-#include <vector>
+#include <time.h>
+
 #include <string>
-#include <semaphore.h>
- 
-// Singleton which provides a listener thead to accept alarm requests from
-// clients via ZMQ, then generates alarmActiveState/alarmClearState inform
-// notifications as appropriate based upon these requests.
+#include <map>
+#include <set>
+#include <cstdint>
 
-class AlarmReqListener
+#include "alarm_table_defs.hpp"
+
+enum NotificationType
+{
+  RFC3877,
+  ENTERPRISE
+};
+
+class AlarmScheduler;
+
+// Class providing methods for generating alarmActiveState and
+// alarmClearState inform notifications.
+class AlarmTrapSender
 {
 public:
-  static AlarmReqListener& get_instance() {return _instance;}
+  void initialise(AlarmScheduler* alarm_scheduler,
+                  std::set<NotificationType> snmp_notifications)
+    { _alarm_scheduler    = alarm_scheduler;
+      _snmp_notifications = snmp_notifications; }
 
-  // Initialize ZMQ context and start listener thread.
-  bool start(sem_t* term_sem);
+  void send_trap(const AlarmTableDef& alarm_table_def);
 
-  // Gracefully stop the listener thread and remove ZMQ context.
-  void stop();
+  // Callback triggered when an alarm send completes (either successfully
+  // or not).
+  //
+  // @param op - NETSNMP operation code
+  // @param alarm_table_def - The alarm entry that was being raised
+  void alarm_trap_send_callback(int op,
+                                const AlarmTableDef& alarm_table_def);
+
+  static AlarmTrapSender& get_instance() {return _instance;}
 
 private:
-  enum {ZMQ_PORT = 6664};
-
-  static void* listener_thread(void* alarm_req_listener);
-
-  AlarmReqListener();
-
-  bool zmq_init_ctx();
-  bool zmq_init_sck();
-
-  void zmq_clean_ctx();
-  void zmq_clean_sck();
-
-  void listener();
-
-  bool next_msg(std::vector<std::string>& msg);
-
-  void reply(const char* response);
-
-  static AlarmReqListener _instance;
-
-  pthread_t _thread;
-
-  pthread_mutex_t _start_mutex;
-  pthread_cond_t  _start_cond;
-
-  void* _ctx;
-  void* _sck;
-
-  sem_t* _term_sem;
+  AlarmTrapSender() : _alarm_scheduler(NULL) {}
+  AlarmScheduler* _alarm_scheduler;
+  std::set<NotificationType> _snmp_notifications;
+  static AlarmTrapSender _instance;
+  // Sends an RFC3877 compliant trap based upon the specified alarm definition.
+  // net-snmp will handle the retries if needed. 
+  void send_rfc3877_trap(const AlarmTableDef& alarm_table_def);
+  // Sends an Enterprise MIB style trap based upon the specified alarm
+  // definition. net-snmp will handle the retries if needed.
+  void send_enterprise_trap(const AlarmTableDef& alarm_table_def);
 };
 
 #endif
-
