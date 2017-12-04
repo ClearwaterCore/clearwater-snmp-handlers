@@ -299,7 +299,7 @@ TEST_F(AlarmSchedulerTest, SetRFCAlarm)
 {
   std::set<NotificationType> snmp_notifications;
   snmp_notifications.insert(NotificationType::RFC3877);
-  _alarm_scheduler = new AlarmScheduler(_alarm_table_defs, snmp_notifications, "hostname1", &_lock);
+  _alarm_scheduler = new AlarmScheduler(_alarm_table_defs, snmp_notifications, "hostname1", _lock);
 
   COLLECT_CALL(send_v2trap(RFCTrapVars(RFCTrapVarsMatcher::ACTIVE, 1000), _, _));
   _alarm_scheduler->issue_alarm("test", "1000.3");
@@ -312,7 +312,7 @@ TEST_F(AlarmSchedulerTest, SetEnterpriseAlarm)
 {
   std::set<NotificationType> snmp_notifications;
   snmp_notifications.insert(NotificationType::ENTERPRISE);
-  _alarm_scheduler = new AlarmScheduler(_alarm_table_defs, snmp_notifications, "hostname1", &_lock);
+  _alarm_scheduler = new AlarmScheduler(_alarm_table_defs, snmp_notifications, "hostname1", _lock);
 
   // Here we are checking for severity reported as an AlarmModelState value
   oid trap_type[] = {1,2,826,0,1,1578918,19444,9,2,1,1};
@@ -340,7 +340,7 @@ TEST_F(AlarmSchedulerTest, SetBothAlarms)
   std::set<NotificationType> snmp_notifications;
   snmp_notifications.insert(NotificationType::RFC3877);
   snmp_notifications.insert(NotificationType::ENTERPRISE);
-  _alarm_scheduler = new AlarmScheduler(_alarm_table_defs, snmp_notifications, "hostname1", &_lock);
+  _alarm_scheduler = new AlarmScheduler(_alarm_table_defs, snmp_notifications, "hostname1", _lock);
 
   oid trap_type[] = {1,2,826,0,1,1578918,19444,9,2,1,1};
   oid alarm_oid[] = {1,3,6,1,2,1,118,1,1,2,1,3,0,1,2,1000};
@@ -368,7 +368,7 @@ TEST_F(AlarmSchedulerTest, ClearAlarm)
 {
   std::set<NotificationType> snmp_notifications;
   snmp_notifications.insert(NotificationType::RFC3877);
-  _alarm_scheduler = new AlarmScheduler(_alarm_table_defs, snmp_notifications, "hostname1", &_lock);
+  _alarm_scheduler = new AlarmScheduler(_alarm_table_defs, snmp_notifications, "hostname1", _lock);
 
   COLLECT_CALL(send_v2trap(RFCTrapVars(RFCTrapVarsMatcher::CLEAR, 1000), _, _));
   _alarm_scheduler->issue_alarm("test", "1000.1");
@@ -380,7 +380,7 @@ TEST_F(AlarmSchedulerTest, SetAndClearAlarm)
 {
   std::set<NotificationType> snmp_notifications;
   snmp_notifications.insert(NotificationType::RFC3877);
-  _alarm_scheduler = new AlarmScheduler(_alarm_table_defs, snmp_notifications, "hostname1", &_lock);
+  _alarm_scheduler = new AlarmScheduler(_alarm_table_defs, snmp_notifications, "hostname1", _lock);
 
   // Set the alarm - this should raise the alarm straight away
   COLLECT_CALL(send_v2trap(RFCTrapVars(RFCTrapVarsMatcher::ACTIVE, 1000), _, _));
@@ -397,9 +397,9 @@ TEST_F(AlarmSchedulerTest, SetAndClearAlarm)
   // cleared alarm is sent.
   cwtest_advance_time_ms(AlarmScheduler::ALARM_REDUCED_DELAY);
   COLLECT_CALL(send_v2trap(RFCTrapVars(RFCTrapVarsMatcher::CLEAR, 1000), _, _));
-  pthread_mutex_lock(_alarm_scheduler->_lock);
+  pthread_mutex_lock(&_alarm_scheduler->_lock);
   _alarm_scheduler->_cond->signal();
-  pthread_mutex_unlock(_alarm_scheduler->_lock);
+  pthread_mutex_unlock(&_alarm_scheduler->_lock);
   _ms.trap_complete(1, 5);
 }
 
@@ -408,7 +408,7 @@ TEST_F(AlarmSchedulerTest, SetAlarmRepeatedState)
 {
   std::set<NotificationType> snmp_notifications;
   snmp_notifications.insert(NotificationType::RFC3877);
-  _alarm_scheduler = new AlarmScheduler(_alarm_table_defs, snmp_notifications, "hostname1", &_lock);
+  _alarm_scheduler = new AlarmScheduler(_alarm_table_defs, snmp_notifications, "hostname1", _lock);
 
   COLLECT_CALL(send_v2trap(RFCTrapVars(RFCTrapVarsMatcher::ACTIVE, 1000), _, _));
   _alarm_scheduler->issue_alarm("test", "1000.3");
@@ -421,7 +421,7 @@ TEST_F(AlarmSchedulerTest, SetMultiAlarmIncreasingState)
 {
   std::set<NotificationType> snmp_notifications;
   snmp_notifications.insert(NotificationType::RFC3877);
-  _alarm_scheduler = new AlarmScheduler(_alarm_table_defs, snmp_notifications, "hostname1", &_lock);
+  _alarm_scheduler = new AlarmScheduler(_alarm_table_defs, snmp_notifications, "hostname1", _lock);
 
   COLLECT_CALL(send_v2trap(RFCTrapVars(RFCTrapVarsMatcher::CLEAR, 2000), _, _));
   _alarm_scheduler->issue_alarm("test", "2000.1");
@@ -442,7 +442,7 @@ TEST_F(AlarmSchedulerTest, SyncAlarms)
 {
   std::set<NotificationType> snmp_notifications;
   snmp_notifications.insert(NotificationType::RFC3877);
-  _alarm_scheduler = new AlarmScheduler(_alarm_table_defs, snmp_notifications, "hostname1", &_lock);
+  _alarm_scheduler = new AlarmScheduler(_alarm_table_defs, snmp_notifications, "hostname1", _lock);
 
   // Put our three alarms into a state we expect
   COLLECT_CALL(send_v2trap(RFCTrapVars(RFCTrapVarsMatcher::ACTIVE,
@@ -482,7 +482,7 @@ TEST_F(AlarmSchedulerTest, AlarmFlicker)
 {
   std::set<NotificationType> snmp_notifications;
   snmp_notifications.insert(NotificationType::RFC3877);
-  _alarm_scheduler = new AlarmScheduler(_alarm_table_defs, snmp_notifications, "hostname1", &_lock);
+  _alarm_scheduler = new AlarmScheduler(_alarm_table_defs, snmp_notifications, "hostname1", _lock);
 
   COLLECT_CALL(send_v2trap(RFCTrapVars(RFCTrapVarsMatcher::ACTIVE,
                                     1000), _, _));
@@ -498,9 +498,9 @@ TEST_F(AlarmSchedulerTest, AlarmFlicker)
   }
 
   cwtest_advance_time_ms(AlarmScheduler::ALARM_REDUCED_DELAY);
-  pthread_mutex_lock(_alarm_scheduler->_lock);
+  pthread_mutex_lock(&_alarm_scheduler->_lock);
   _alarm_scheduler->_cond->signal();
-  pthread_mutex_unlock(_alarm_scheduler->_lock);
+  pthread_mutex_unlock(&_alarm_scheduler->_lock);
   _ms.trap_complete(1, 5);
 }
 
@@ -509,7 +509,7 @@ TEST_F(AlarmSchedulerTest, AlarmFailedToSend)
 {
   std::set<NotificationType> snmp_notifications;
   snmp_notifications.insert(NotificationType::RFC3877);
-  _alarm_scheduler = new AlarmScheduler(_alarm_table_defs, snmp_notifications, "hostname1", &_lock);
+  _alarm_scheduler = new AlarmScheduler(_alarm_table_defs, snmp_notifications, "hostname1", _lock);
 
   snmp_callback callback;
   void* correlator;
@@ -520,21 +520,21 @@ TEST_F(AlarmSchedulerTest, AlarmFailedToSend)
   _ms.trap_complete(1, 5);
 
   // Now report the send as failed.
-  pthread_mutex_lock(_alarm_scheduler->_lock);
+  pthread_mutex_lock(&_alarm_scheduler->_lock);
   snmp_session session;
   session.peername = strdup("peer");
   callback(NETSNMP_CALLBACK_OP_TIMED_OUT, &session, 2, NULL, correlator);
   free(session.peername);
-  pthread_mutex_unlock(_alarm_scheduler->_lock);
+  pthread_mutex_unlock(&_alarm_scheduler->_lock);
 
   // Now advance time by the retry delay amount. This triggers the retry to be
   // sent
   COLLECT_CALL(send_v2trap(RFCTrapVars(RFCTrapVarsMatcher::ACTIVE,
                                        1000), _, _));
   cwtest_advance_time_ms(AlarmScheduler::ALARM_RETRY_DELAY);
-  pthread_mutex_lock(_alarm_scheduler->_lock);
+  pthread_mutex_lock(&_alarm_scheduler->_lock);
   _alarm_scheduler->_cond->signal();
-  pthread_mutex_unlock(_alarm_scheduler->_lock);
+  pthread_mutex_unlock(&_alarm_scheduler->_lock);
   _ms.trap_complete(1, 5);
 }
 
@@ -544,7 +544,7 @@ TEST_F(AlarmSchedulerTest, AlarmFailedToSendClearedInInterval)
 {
   std::set<NotificationType> snmp_notifications;
   snmp_notifications.insert(NotificationType::RFC3877);
-  _alarm_scheduler = new AlarmScheduler(_alarm_table_defs, snmp_notifications, "hostname1", &_lock);
+  _alarm_scheduler = new AlarmScheduler(_alarm_table_defs, snmp_notifications, "hostname1", _lock);
 
   snmp_callback callback;
   void* correlator;
@@ -566,9 +566,9 @@ TEST_F(AlarmSchedulerTest, AlarmFailedToSendClearedInInterval)
   COLLECT_CALL(send_v2trap(RFCTrapVars(RFCTrapVarsMatcher::CLEAR,
                                        1000), _, _));
   cwtest_advance_time_ms(AlarmScheduler::ALARM_REDUCED_DELAY);
-  pthread_mutex_lock(_alarm_scheduler->_lock);
+  pthread_mutex_lock(&_alarm_scheduler->_lock);
   _alarm_scheduler->_cond->signal();
-  pthread_mutex_unlock(_alarm_scheduler->_lock);
+  pthread_mutex_unlock(&_alarm_scheduler->_lock);
   _ms.trap_complete(1, 5);
 }
 
@@ -577,7 +577,7 @@ TEST_F(AlarmSchedulerTest, InvalidAlarmIdentifier)
 {
   std::set<NotificationType> snmp_notifications;
   snmp_notifications.insert(NotificationType::RFC3877);
-  _alarm_scheduler = new AlarmScheduler(_alarm_table_defs, snmp_notifications, "hostname1", &_lock);
+  _alarm_scheduler = new AlarmScheduler(_alarm_table_defs, snmp_notifications, "hostname1", _lock);
 
   EXPECT_CALL(_ms, send_v2trap(_, _, _)).
     Times(0);
@@ -591,7 +591,7 @@ TEST_F(AlarmSchedulerTest, UnknownAlarmIdentifier)
 {
   std::set<NotificationType> snmp_notifications;
   snmp_notifications.insert(NotificationType::RFC3877);
-  _alarm_scheduler = new AlarmScheduler(_alarm_table_defs, snmp_notifications, "hostname1", &_lock);
+  _alarm_scheduler = new AlarmScheduler(_alarm_table_defs, snmp_notifications, "hostname1", _lock);
 
   EXPECT_CALL(_ms, send_v2trap(_, _, _)).
     Times(0);
